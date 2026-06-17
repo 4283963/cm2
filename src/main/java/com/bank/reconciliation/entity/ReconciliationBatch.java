@@ -50,6 +50,12 @@ public class ReconciliationBatch {
     @Column(name = "amount_mismatch_count")
     private Long amountMismatchCount;
 
+    @Column(name = "auto_adjusted_count")
+    private Long autoAdjustedCount;
+
+    @Column(name = "auto_adjusted_amount", precision = 32, scale = 2)
+    private java.math.BigDecimal autoAdjustedAmount;
+
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 
@@ -120,6 +126,12 @@ public class ReconciliationBatch {
 
     public Long getAmountMismatchCount() { return amountMismatchCount; }
     public void setAmountMismatchCount(Long amountMismatchCount) { this.amountMismatchCount = amountMismatchCount; }
+
+    public Long getAutoAdjustedCount() { return autoAdjustedCount; }
+    public void setAutoAdjustedCount(Long autoAdjustedCount) { this.autoAdjustedCount = autoAdjustedCount; }
+
+    public java.math.BigDecimal getAutoAdjustedAmount() { return autoAdjustedAmount; }
+    public void setAutoAdjustedAmount(java.math.BigDecimal autoAdjustedAmount) { this.autoAdjustedAmount = autoAdjustedAmount; }
 
     public LocalDateTime getStartedAt() { return startedAt; }
     public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }

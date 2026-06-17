@@ -1,5 +1,6 @@
 package com.bank.reconciliation.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public class ReconciliationResult {
@@ -12,6 +13,8 @@ public class ReconciliationResult {
     private Long localOnlyCount;
     private Long unionpayOnlyCount;
     private Long amountMismatchCount;
+    private Long autoAdjustedCount;
+    private BigDecimal autoAdjustedAmount;
 
     public ReconciliationResult() {
     }
@@ -51,4 +54,10 @@ public class ReconciliationResult {
 
     public Long getAmountMismatchCount() { return amountMismatchCount; }
     public void setAmountMismatchCount(Long amountMismatchCount) { this.amountMismatchCount = amountMismatchCount; }
+
+    public Long getAutoAdjustedCount() { return autoAdjustedCount; }
+    public void setAutoAdjustedCount(Long autoAdjustedCount) { this.autoAdjustedCount = autoAdjustedCount; }
+
+    public BigDecimal getAutoAdjustedAmount() { return autoAdjustedAmount; }
+    public void setAutoAdjustedAmount(BigDecimal autoAdjustedAmount) { this.autoAdjustedAmount = autoAdjustedAmount; }
 }

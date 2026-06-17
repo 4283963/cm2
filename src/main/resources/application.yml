@@ -31,6 +31,10 @@ spring:
 reconciliation:
   file-storage-path: /tmp/reconciliation-files
   batch-size: 1000
+  auto-adjust-threshold: 1.00
+  auto-adjust-enabled: true
+  small-profit-loss-account: 660201
+  finance-operator: SYSTEM_AUTO
   thread-pool:
     core-size: 4
     max-size: 8

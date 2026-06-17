@@ -26,14 +26,17 @@ public class ReconciliationService {
     private final ReconciliationBatchRepository batchRepository;
     private final CheckErrorLedgerRepository checkErrorLedgerRepository;
     private final ReconciliationTxExecutor txExecutor;
+    private final AutoAdjustmentService autoAdjustmentService;
 
     @Autowired
     public ReconciliationService(ReconciliationBatchRepository batchRepository,
                                  CheckErrorLedgerRepository checkErrorLedgerRepository,
-                                 ReconciliationTxExecutor txExecutor) {
+                                 ReconciliationTxExecutor txExecutor,
+                                 AutoAdjustmentService autoAdjustmentService) {
         this.batchRepository = batchRepository;
         this.checkErrorLedgerRepository = checkErrorLedgerRepository;
         this.txExecutor = txExecutor;
+        this.autoAdjustmentService = autoAdjustmentService;
     }
 
     public ReconciliationResult startReconciliation(String batchNo) {
@@ -71,6 +74,17 @@ public class ReconciliationService {
             batch.setStatus(ReconciliationBatch.Status.FAILED);
             batch.setFinishedAt(LocalDateTime.now());
             batchRepository.save(batch);
+            return;
+        }
+
+        try {
+            log.info("对账完成，开始执行小额差错自动平账: batchNo={}", batchNo);
+            ReconciliationBatch updatedBatch = batchRepository.findByBatchNo(batchNo).orElse(null);
+            if (updatedBatch != null) {
+                autoAdjustmentService.executeAutoAdjustForBatch(updatedBatch.getId());
+            }
+        } catch (Exception e) {
+            log.warn("自动平账执行异常（不影响对账结果）: batchNo={}", batchNo, e);
         }
     }
 
@@ -87,6 +101,8 @@ public class ReconciliationService {
         result.setLocalOnlyCount(batch.getLocalOnlyCount());
         result.setUnionpayOnlyCount(batch.getUnionpayOnlyCount());
         result.setAmountMismatchCount(batch.getAmountMismatchCount());
+        result.setAutoAdjustedCount(batch.getAutoAdjustedCount());
+        result.setAutoAdjustedAmount(batch.getAutoAdjustedAmount());
         return result;
     }
 
@@ -99,5 +115,15 @@ public class ReconciliationService {
         }
         Pageable pageable = PageRequest.of(page, size);
         return checkErrorLedgerRepository.findByBatchId(batch.getId(), pageable).getContent();
+    }
+
+    public AutoAdjustmentService.AutoAdjustmentSummary triggerAutoAdjustment(String batchNo) {
+        ReconciliationBatch batch = batchRepository.findByBatchNo(batchNo)
+                .orElseThrow(() -> new BusinessException("批次不存在: " + batchNo));
+        return autoAdjustmentService.executeAutoAdjustForBatch(batch.getId());
+    }
+
+    public AutoAdjustmentService getAutoAdjustmentService() {
+        return autoAdjustmentService;
     }
 }

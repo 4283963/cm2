@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Repository
@@ -30,4 +31,14 @@ public interface CheckErrorLedgerRepository extends JpaRepository<CheckErrorLedg
     void deleteByBatchId(@Param("batchId") Long batchId);
 
     List<CheckErrorLedger> findByStatus(String status);
+
+    List<CheckErrorLedger> findByBatchIdAndStatus(Long batchId, String status);
+
+    long countByBatchIdAndStatus(Long batchId, String status);
+
+    @Query("SELECT COALESCE(SUM(ABS(c.diffAmount)), 0) FROM CheckErrorLedger c WHERE c.batchId = :batchId AND c.status = :status")
+    BigDecimal sumAbsDiffAmountByBatchIdAndStatus(@Param("batchId") Long batchId, @Param("status") String status);
+
+    @Query("SELECT c FROM CheckErrorLedger c WHERE c.batchId = :batchId AND c.errorType = 'AMOUNT_MISMATCH' AND c.status = 'PENDING' AND ABS(c.diffAmount) <= :threshold")
+    List<CheckErrorLedger> findSmallAmountMismatchForAutoAdjust(@Param("batchId") Long batchId, @Param("threshold") BigDecimal threshold);
 }

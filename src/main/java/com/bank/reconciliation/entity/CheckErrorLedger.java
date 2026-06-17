@@ -52,6 +52,18 @@ public class CheckErrorLedger {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "adjusted_at")
+    private LocalDateTime adjustedAt;
+
+    @Column(name = "adjusted_by", length = 64)
+    private String adjustedBy;
+
+    @Column(name = "adjustment_ref_no", length = 64)
+    private String adjustmentRefNo;
+
+    @Column(name = "adjustment_amount", precision = 32, scale = 2)
+    private BigDecimal adjustmentAmount;
+
     public CheckErrorLedger() {
     }
 
@@ -60,7 +72,7 @@ public class CheckErrorLedger {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         if (status == null) {
-            status = "PENDING";
+            status = Status.PENDING;
         }
     }
 
@@ -74,6 +86,7 @@ public class CheckErrorLedger {
         public static final String CONFIRMED = "CONFIRMED";
         public static final String RESOLVED = "RESOLVED";
         public static final String IGNORED = "IGNORED";
+        public static final String AUTO_ADJUSTED = "AUTO_ADJUSTED";
     }
 
     public Long getId() { return id; }
@@ -111,4 +124,16 @@ public class CheckErrorLedger {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public LocalDateTime getAdjustedAt() { return adjustedAt; }
+    public void setAdjustedAt(LocalDateTime adjustedAt) { this.adjustedAt = adjustedAt; }
+
+    public String getAdjustedBy() { return adjustedBy; }
+    public void setAdjustedBy(String adjustedBy) { this.adjustedBy = adjustedBy; }
+
+    public String getAdjustmentRefNo() { return adjustmentRefNo; }
+    public void setAdjustmentRefNo(String adjustmentRefNo) { this.adjustmentRefNo = adjustmentRefNo; }
+
+    public BigDecimal getAdjustmentAmount() { return adjustmentAmount; }
+    public void setAdjustmentAmount(BigDecimal adjustmentAmount) { this.adjustmentAmount = adjustmentAmount; }
 }
