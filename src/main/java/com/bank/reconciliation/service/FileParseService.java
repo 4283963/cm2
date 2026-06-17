@@ -1,9 +1,10 @@
 package com.bank.reconciliation.service;
 
+import com.bank.reconciliation.common.AmountUtils;
+import com.bank.reconciliation.common.BusinessException;
 import com.bank.reconciliation.dto.ReconciliationUploadResponse;
 import com.bank.reconciliation.entity.ReconciliationBatch;
 import com.bank.reconciliation.entity.UnionPayTransaction;
-import com.bank.reconciliation.common.BusinessException;
 import com.bank.reconciliation.repository.ReconciliationBatchRepository;
 import com.bank.reconciliation.repository.UnionPayTransactionRepository;
 import org.slf4j.Logger;
@@ -173,7 +174,7 @@ public class FileParseService {
 
         String traceNo = fields[0].trim();
         String orderNo = fields.length > 1 ? fields[1].trim() : null;
-        BigDecimal amount = new BigDecimal(fields[2].trim());
+        BigDecimal amount = AmountUtils.of(fields[2].trim());
         String currency = fields.length > 3 ? fields[3].trim() : "CNY";
         String transType = fields.length > 4 ? fields[4].trim() : null;
         String transDateStr = fields.length > 5 ? fields[5].trim() : null;

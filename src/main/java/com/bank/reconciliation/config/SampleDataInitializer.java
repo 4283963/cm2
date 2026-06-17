@@ -1,5 +1,6 @@
 package com.bank.reconciliation.config;
 
+import com.bank.reconciliation.common.AmountUtils;
 import com.bank.reconciliation.entity.BankOrder;
 import com.bank.reconciliation.repository.BankOrderRepository;
 import org.slf4j.Logger;
@@ -10,7 +11,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +46,7 @@ public class SampleDataInitializer implements CommandLineRunner {
         for (int i = 1; i <= 100; i++) {
             String orderNo = "ORD" + String.format("%08d", i);
             String traceNo = "TRACE" + String.format("%08d", i);
-            BigDecimal amount = BigDecimal.valueOf(100 + random.nextInt(10000) / 100.0 * 100).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal amount = AmountUtils.of(100 + random.nextInt(10000));
 
             BankOrder order = new BankOrder();
             order.setOrderNo(orderNo);
@@ -66,7 +66,7 @@ public class SampleDataInitializer implements CommandLineRunner {
             BankOrder order = new BankOrder();
             order.setOrderNo(orderNo);
             order.setUnionpayTraceNo(null);
-            order.setAmount(BigDecimal.valueOf(500 + i * 10).setScale(2, RoundingMode.HALF_UP));
+            order.setAmount(AmountUtils.of(500 + i * 10));
             order.setCurrency("CNY");
             order.setStatus("SUCCESS");
             order.setPayerAccount("622202******1234");
@@ -76,7 +76,36 @@ public class SampleDataInitializer implements CommandLineRunner {
             orders.add(order);
         }
 
+        String[] superLargeAmounts = {
+            "123456789.12",
+            "987654321.99",
+            "1000000000.00",
+            "5000000000.50",
+            "12345678901.23",
+            "99999999999.99",
+            "500000000000.00",
+            "1000000000000.01"
+        };
+
+        for (int i = 0; i < superLargeAmounts.length; i++) {
+            int orderIdx = 200 + i;
+            String orderNo = "ORD" + String.format("%08d", orderIdx);
+            String traceNo = "TRACE" + String.format("%08d", orderIdx);
+
+            BankOrder order = new BankOrder();
+            order.setOrderNo(orderNo);
+            order.setUnionpayTraceNo(traceNo);
+            order.setAmount(AmountUtils.of(superLargeAmounts[i]));
+            order.setCurrency("CNY");
+            order.setStatus("SUCCESS");
+            order.setPayerAccount("622202******8888");
+            order.setPayeeAccount("622202******9999");
+            order.setRemark("超级大额转账-" + (i + 1) + "-" + superLargeAmounts[i] + "元");
+            order.setTransDate(yesterday.plusHours(8).plusMinutes(i * 5L));
+            orders.add(order);
+        }
+
         bankOrderRepository.saveAll(orders);
-        log.info("测试数据初始化完成，共 {} 条订单", orders.size());
+        log.info("测试数据初始化完成，共 {} 条订单（含 {} 条超级大额转账）", orders.size(), superLargeAmounts.length);
     }
 }

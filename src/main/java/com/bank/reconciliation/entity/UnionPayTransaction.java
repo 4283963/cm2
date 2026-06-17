@@ -26,7 +26,7 @@ public class UnionPayTransaction {
     @Column(length = 64)
     private String orderNo;
 
-    @Column(nullable = false, precision = 18, scale = 2)
+    @Column(nullable = false, precision = 32, scale = 2)
     private BigDecimal amount;
 
     @Column(length = 32)

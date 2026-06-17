@@ -31,13 +31,13 @@ public class CheckErrorLedger {
     @Column(nullable = false, length = 32)
     private ErrorType errorType;
 
-    @Column(precision = 18, scale = 2)
+    @Column(precision = 32, scale = 2)
     private BigDecimal localAmount;
 
-    @Column(precision = 18, scale = 2)
+    @Column(precision = 32, scale = 2)
     private BigDecimal unionpayAmount;
 
-    @Column(precision = 18, scale = 2)
+    @Column(precision = 32, scale = 2)
     private BigDecimal diffAmount;
 
     @Column(length = 32)

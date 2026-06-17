@@ -1,5 +1,6 @@
 package com.bank.reconciliation.service;
 
+import com.bank.reconciliation.common.AmountUtils;
 import com.bank.reconciliation.entity.BankOrder;
 import com.bank.reconciliation.entity.CheckErrorLedger;
 import com.bank.reconciliation.entity.ErrorType;
@@ -101,36 +102,11 @@ public class ReconciliationTxExecutor {
 
         while (!bankOrderPage.isEmpty()) {
             for (BankOrder bankOrder : bankOrderPage.getContent()) {
-                String traceNo = bankOrder.getUnionpayTraceNo();
-                if (traceNo != null && !traceNo.isEmpty()) {
-                    UnionPayTransaction unionpayTx = unionpayMap.get(traceNo);
-                    if (unionpayTx != null) {
-                        matchedTraceNos.add(traceNo);
-                        if (bankOrder.getAmount().compareTo(unionpayTx.getAmount()) != 0) {
-                            errorBuffer.add(createAmountMismatchError(batch.getId(), bankOrder, unionpayTx));
-                            stats.amountMismatchCount++;
-                        } else {
-                            stats.matchedCount++;
-                        }
-                    } else {
-                        errorBuffer.add(createLocalOnlyError(batch.getId(), bankOrder));
-                        stats.localOnlyCount++;
-                    }
-                } else {
-                    String orderNo = bankOrder.getOrderNo();
-                    UnionPayTransaction unionpayTx = findByOrderNo(unionpayMap, orderNo);
-                    if (unionpayTx != null) {
-                        matchedTraceNos.add(unionpayTx.getTraceNo());
-                        if (bankOrder.getAmount().compareTo(unionpayTx.getAmount()) != 0) {
-                            errorBuffer.add(createAmountMismatchError(batch.getId(), bankOrder, unionpayTx));
-                            stats.amountMismatchCount++;
-                        } else {
-                            stats.matchedCount++;
-                        }
-                    } else {
-                        errorBuffer.add(createLocalOnlyError(batch.getId(), bankOrder));
-                        stats.localOnlyCount++;
-                    }
+                try {
+                    processBankOrder(batch.getId(), bankOrder, unionpayMap, matchedTraceNos, errorBuffer, stats);
+                } catch (Exception e) {
+                    log.warn("处理本地订单异常: orderNo={}, error={}", bankOrder.getOrderNo(), e.getMessage());
+                    stats.processErrorCount++;
                 }
 
                 if (errorBuffer.size() >= batchSize) {
@@ -146,8 +122,13 @@ public class ReconciliationTxExecutor {
 
         for (Map.Entry<String, UnionPayTransaction> entry : unionpayMap.entrySet()) {
             if (!matchedTraceNos.contains(entry.getKey())) {
-                errorBuffer.add(createUnionpayOnlyError(batch.getId(), entry.getValue()));
-                stats.unionpayOnlyCount++;
+                try {
+                    errorBuffer.add(createUnionpayOnlyError(batch.getId(), entry.getValue()));
+                    stats.unionpayOnlyCount++;
+                } catch (Exception e) {
+                    log.warn("处理银联流水异常: traceNo={}, error={}", entry.getKey(), e.getMessage());
+                    stats.processErrorCount++;
+                }
 
                 if (errorBuffer.size() >= batchSize) {
                     checkErrorLedgerRepository.saveAll(errorBuffer);
@@ -160,7 +141,60 @@ public class ReconciliationTxExecutor {
             checkErrorLedgerRepository.saveAll(errorBuffer);
         }
 
+        if (stats.processErrorCount > 0) {
+            log.warn("本次对账存在 {} 条处理异常的记录", stats.processErrorCount);
+        }
+
         return stats;
+    }
+
+    private void processBankOrder(Long batchId, BankOrder bankOrder, Map<String, UnionPayTransaction> unionpayMap,
+                                   Set<String> matchedTraceNos, List<CheckErrorLedger> errorBuffer,
+                                   ReconciliationStats stats) {
+
+        if (bankOrder.getAmount() == null) {
+            log.warn("本地订单金额为空: orderNo={}", bankOrder.getOrderNo());
+            stats.processErrorCount++;
+            return;
+        }
+
+        if (!AmountUtils.isAmountValid(bankOrder.getAmount())) {
+            log.warn("本地订单金额不合法: orderNo={}, amount={}", bankOrder.getOrderNo(), bankOrder.getAmount());
+            stats.processErrorCount++;
+            return;
+        }
+
+        String traceNo = bankOrder.getUnionpayTraceNo();
+        if (traceNo != null && !traceNo.isEmpty()) {
+            UnionPayTransaction unionpayTx = unionpayMap.get(traceNo);
+            if (unionpayTx != null) {
+                matchedTraceNos.add(traceNo);
+                if (AmountUtils.compare(bankOrder.getAmount(), unionpayTx.getAmount()) != 0) {
+                    errorBuffer.add(createAmountMismatchError(batchId, bankOrder, unionpayTx));
+                    stats.amountMismatchCount++;
+                } else {
+                    stats.matchedCount++;
+                }
+            } else {
+                errorBuffer.add(createLocalOnlyError(batchId, bankOrder));
+                stats.localOnlyCount++;
+            }
+        } else {
+            String orderNo = bankOrder.getOrderNo();
+            UnionPayTransaction unionpayTx = findByOrderNo(unionpayMap, orderNo);
+            if (unionpayTx != null) {
+                matchedTraceNos.add(unionpayTx.getTraceNo());
+                if (AmountUtils.compare(bankOrder.getAmount(), unionpayTx.getAmount()) != 0) {
+                    errorBuffer.add(createAmountMismatchError(batchId, bankOrder, unionpayTx));
+                    stats.amountMismatchCount++;
+                } else {
+                    stats.matchedCount++;
+                }
+            } else {
+                errorBuffer.add(createLocalOnlyError(batchId, bankOrder));
+                stats.localOnlyCount++;
+            }
+        }
     }
 
     private Map<String, UnionPayTransaction> loadUnionPayTransactions(Long batchId) {
@@ -172,7 +206,11 @@ public class ReconciliationTxExecutor {
 
         while (!page.isEmpty()) {
             for (UnionPayTransaction tx : page.getContent()) {
-                map.put(tx.getTraceNo(), tx);
+                if (tx.getAmount() != null && AmountUtils.isAmountValid(tx.getAmount())) {
+                    map.put(tx.getTraceNo(), tx);
+                } else {
+                    log.warn("银联流水金额不合法，跳过: traceNo={}, amount={}", tx.getTraceNo(), tx.getAmount());
+                }
             }
             pageNumber++;
             pageable = PageRequest.of(pageNumber, batchSize);
@@ -196,42 +234,47 @@ public class ReconciliationTxExecutor {
     }
 
     private CheckErrorLedger createLocalOnlyError(Long batchId, BankOrder bankOrder) {
+        BigDecimal localAmount = AmountUtils.normalize(bankOrder.getAmount());
         CheckErrorLedger ledger = new CheckErrorLedger();
         ledger.setBatchId(batchId);
         ledger.setOrderNo(bankOrder.getOrderNo());
         ledger.setUnionpayTraceNo(bankOrder.getUnionpayTraceNo());
         ledger.setErrorType(ErrorType.LOCAL_ONLY);
-        ledger.setLocalAmount(bankOrder.getAmount());
+        ledger.setLocalAmount(localAmount);
         ledger.setUnionpayAmount(BigDecimal.ZERO);
-        ledger.setDiffAmount(bankOrder.getAmount());
+        ledger.setDiffAmount(localAmount);
         ledger.setRemark("本地有银联无");
         ledger.setStatus(CheckErrorLedger.Status.PENDING);
         return ledger;
     }
 
     private CheckErrorLedger createUnionpayOnlyError(Long batchId, UnionPayTransaction unionpayTx) {
+        BigDecimal unionpayAmount = AmountUtils.normalize(unionpayTx.getAmount());
         CheckErrorLedger ledger = new CheckErrorLedger();
         ledger.setBatchId(batchId);
         ledger.setOrderNo(unionpayTx.getOrderNo());
         ledger.setUnionpayTraceNo(unionpayTx.getTraceNo());
         ledger.setErrorType(ErrorType.UNIONPAY_ONLY);
         ledger.setLocalAmount(BigDecimal.ZERO);
-        ledger.setUnionpayAmount(unionpayTx.getAmount());
-        ledger.setDiffAmount(unionpayTx.getAmount().negate());
+        ledger.setUnionpayAmount(unionpayAmount);
+        ledger.setDiffAmount(AmountUtils.negate(unionpayAmount));
         ledger.setRemark("本地无银联有");
         ledger.setStatus(CheckErrorLedger.Status.PENDING);
         return ledger;
     }
 
     private CheckErrorLedger createAmountMismatchError(Long batchId, BankOrder bankOrder, UnionPayTransaction unionpayTx) {
-        BigDecimal diff = bankOrder.getAmount().subtract(unionpayTx.getAmount());
+        BigDecimal localAmount = AmountUtils.normalize(bankOrder.getAmount());
+        BigDecimal unionpayAmount = AmountUtils.normalize(unionpayTx.getAmount());
+        BigDecimal diff = AmountUtils.subtract(localAmount, unionpayAmount);
+
         CheckErrorLedger ledger = new CheckErrorLedger();
         ledger.setBatchId(batchId);
         ledger.setOrderNo(bankOrder.getOrderNo());
         ledger.setUnionpayTraceNo(bankOrder.getUnionpayTraceNo());
         ledger.setErrorType(ErrorType.AMOUNT_MISMATCH);
-        ledger.setLocalAmount(bankOrder.getAmount());
-        ledger.setUnionpayAmount(unionpayTx.getAmount());
+        ledger.setLocalAmount(localAmount);
+        ledger.setUnionpayAmount(unionpayAmount);
         ledger.setDiffAmount(diff);
         ledger.setRemark("金额不符");
         ledger.setStatus(CheckErrorLedger.Status.PENDING);
@@ -243,5 +286,6 @@ public class ReconciliationTxExecutor {
         long localOnlyCount = 0;
         long unionpayOnlyCount = 0;
         long amountMismatchCount = 0;
+        long processErrorCount = 0;
     }
 }
